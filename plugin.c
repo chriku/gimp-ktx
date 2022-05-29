@@ -325,6 +325,33 @@ static gboolean show_options(SaveOptions* save_options) {
   return dialog_result;
 }
 
+typedef struct {
+  gint32 drawable_ID;
+  GeglBuffer* drawable;
+  ktxTexture2* texture;
+  const Babl* format;
+} mip_map_userdata_t;
+
+KTX_error_code mipmap_export(
+    int miplevel, int face, int width, int height, int depth, ktx_uint64_t faceLodSize, void* pixels, void* userdata) {
+  mip_map_userdata_t* ud = (mip_map_userdata_t*)userdata;
+  GeglRectangle rect = {.x = 0, .y = 0, .width = width, .height = height};
+  GeglBuffer* mbuf = gegl_buffer_new(&rect, gimp_drawable_get_format(ud->drawable_ID));
+  gegl_render_op(ud->drawable,
+      mbuf,
+      "gegl:scale-size",
+      "x",
+      (double)width,
+      "y",
+      (double)height,
+      "sampler",
+      GEGL_SAMPLER_CUBIC, // TODFO: Setting
+      NULL);
+  gegl_buffer_get(mbuf, NULL, 1, ud->format, pixels, ktxTexture_GetRowPitch(ktxTexture(ud->texture), miplevel), GEGL_ABYSS_NONE);
+  g_object_unref(mbuf);
+  return KTX_SUCCESS;
+}
+
 static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpParam** return_vals) {
   GimpParam* ret_values = g_new(GimpParam, 2);
   *nreturn_vals = 2;
@@ -490,7 +517,6 @@ static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
     }
     break;
   default:
-    printf("UIF %llu\n", (unsigned long long)image_type);
     ret_values[1].data.d_string = "Unhandled image format";
     return;
   }
@@ -530,7 +556,9 @@ static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
   create_info.baseHeight = gegl_buffer_get_height(drawable);
   create_info.baseDepth = 1;
   create_info.numDimensions = 2;
-  create_info.numLevels = 1;
+  GLuint max_dim = create_info.baseWidth > create_info.baseHeight ? create_info.baseWidth : create_info.baseHeight;
+  create_info.numLevels = log2(max_dim) + 1;
+  // create_info.numLevels = 1; // TODO: Setting
   create_info.numLayers = 1;
   create_info.numFaces = 1;
   create_info.isArray = KTX_FALSE;
@@ -542,12 +570,12 @@ static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
     g_object_unref(drawable);
     return;
   }
-  uint8_t* dest = malloc(create_info.baseWidth * create_info.baseHeight * babl_format_get_bytes_per_pixel(format));
-  gegl_buffer_get(
-      drawable, gegl_buffer_get_extent(drawable), 1, format, dest, ktxTexture_GetRowPitch(ktxTexture(texture), 0), GEGL_ABYSS_NONE);
-  result = ktxTexture_SetImageFromMemory(
-      ktxTexture(texture), 0, 0, 0, dest, create_info.baseWidth * create_info.baseHeight * babl_format_get_bytes_per_pixel(format));
-  free(dest);
+  mip_map_userdata_t mip_map_userdata;
+  mip_map_userdata.drawable_ID = drawable_ID;
+  mip_map_userdata.drawable = drawable;
+  mip_map_userdata.texture = texture;
+  mip_map_userdata.format = format;
+  result = ktxTexture_IterateLevelFaces(ktxTexture(texture), &mipmap_export, &mip_map_userdata);
   if (result != KTX_SUCCESS) {
     ret_values[1].data.d_string = (char*)ktxErrorString(result);
     ktxTexture_Destroy(ktxTexture(texture));
@@ -634,6 +662,7 @@ static void query() {
 
 static void run(const gchar* name, gint nparams, const GimpParam* param, gint* nreturn_vals, GimpParam** return_vals) {
   babl_init();
+  gegl_init(NULL, NULL);
   if (strcmp(name, LOAD_PROC) == 0)
     load(nparams, param, nreturn_vals, return_vals);
   else if (strcmp(name, SAVE_PROC) == 0)
