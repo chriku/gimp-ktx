@@ -4,6 +4,8 @@
 #include <ktxvulkan.h>
 
 #include <libgimp/gimp.h>
+
+#include <libgimp/gimpui.h>
 #include <string.h>
 
 #define LOAD_PROC "file-ktx2-load"
@@ -12,6 +14,7 @@
 
 static void query();
 static void run(const gchar* name, gint nparams, const GimpParam* param, gint* nreturn_vals, GimpParam** return_vals);
+
 static void load(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpParam** return_vals) {
   gchar* filename = param[1].data.d_string;
 
@@ -26,7 +29,7 @@ static void load(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
   }
 
   ktxTexture* texture;
-  KTX_error_code result = ktxTexture_CreateFromNamedFile(gimp_filename_to_utf8(filename), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+  KTX_error_code result = ktxTexture_CreateFromNamedFile(filename, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
   if (result != KTX_SUCCESS) {
     ret_values[1].data.d_string = (char*)ktxErrorString(result);
     return;
@@ -231,6 +234,7 @@ static void load(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
 
   gint32 image_ID = gimp_image_new_with_precision(texture->baseWidth, texture->baseHeight, base_type, GIMP_PRECISION_FLOAT_LINEAR);
   gimp_image_set_filename(image_ID, filename);
+
   gint32 layer_ID = gimp_layer_new(image_ID, "Image", texture->baseWidth, texture->baseHeight, image_type, 100.0, GIMP_NORMAL_MODE);
   GeglBuffer* drawable = gimp_drawable_get_buffer(layer_ID);
 
@@ -259,6 +263,59 @@ static void load(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
   return;
 }
 
+typedef struct {
+  gint super_compression;
+} SaveOptions;
+
+static const SaveOptions DEFAULT_SAVE_OPTIONS = {0, 0};
+static gboolean show_options(SaveOptions* save_options) {
+
+  GtkWidget* dialog = gimp_export_dialog_new("KTX2", PLUG_IN_BINARY, NULL);
+
+  g_signal_connect(dialog, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+
+  gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
+
+  GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_container_set_border_width(GTK_CONTAINER(vbox), 12);
+  gtk_box_pack_start(GTK_BOX(gimp_export_dialog_get_content_area(dialog)), vbox, TRUE, TRUE, 0);
+  gtk_widget_show(vbox);
+
+  GtkWidget* quality_table = gtk_table_new(2, 3, FALSE);
+  gtk_table_set_col_spacings(GTK_TABLE(quality_table), 6);
+  gtk_table_set_row_spacings(GTK_TABLE(quality_table), 6);
+  gtk_box_pack_start(GTK_BOX(vbox), quality_table, FALSE, FALSE, 0);
+  gtk_widget_show(quality_table);
+
+  GtkObject* super_compression_combo_box = gimp_scale_entry_new(GTK_TABLE(quality_table),
+      0,
+      0,
+      "super_compression:",
+      125,
+      0,
+      save_options->super_compression,
+      0.0,
+      255.0,
+      1.0,
+      10.0,
+      0,
+      TRUE,
+      0.0,
+      0.0,
+      "Super Compression: 0 Uncompressed",
+      "?");
+
+  gtk_widget_show(dialog);
+
+  gboolean dialog_result = gimp_dialog_run(GIMP_DIALOG(dialog)) == GTK_RESPONSE_OK;
+
+  save_options->super_compression = (gint)gtk_adjustment_get_value(GTK_ADJUSTMENT(super_compression_combo_box));
+
+  gtk_widget_destroy(dialog);
+
+  return dialog_result;
+}
+
 static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpParam** return_vals) {
   GimpParam* ret_values = g_new(GimpParam, 2);
   *nreturn_vals = 2;
@@ -267,9 +324,191 @@ static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
     ret_values[0].type = GIMP_PDB_STATUS;
     ret_values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
     ret_values[1].type = GIMP_PDB_STRING;
-    ret_values[1].data.d_string = "Not yet implemented";
+    ret_values[1].data.d_string = "Error while saveing";
+  }
+  GimpRunMode run_mode = (GimpRunMode)param[0].data.d_int32;
+  gint32 image_ID = param[1].data.d_int32;
+  gint32 drawable_ID = param[2].data.d_int32;
+  gchar* filename = param[3].data.d_string;
+  gimp_ui_init(PLUG_IN_BINARY, FALSE);
+
+  GimpExportCapabilities capabilities = GIMP_EXPORT_CAN_HANDLE_RGB | GIMP_EXPORT_CAN_HANDLE_GRAY | GIMP_EXPORT_CAN_HANDLE_ALPHA;
+  GimpExportReturn export_return = gimp_export_image(&image_ID, &drawable_ID, "KTX2", capabilities);
+  if (export_return == GIMP_EXPORT_CANCEL) {
+    ret_values[0].data.d_status = GIMP_PDB_CANCEL;
     return;
   }
+  GimpImageType image_type = gimp_drawable_type(drawable_ID);
+  GimpPrecision precision = gimp_image_get_precision(image_ID);
+
+  ktxTextureCreateInfo create_info;
+  const Babl* format = gimp_drawable_get_format(drawable_ID);
+  switch (image_type) {
+  case GIMP_GRAY_IMAGE:
+    switch (precision) {
+    case GIMP_PRECISION_U8_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R8_UNORM;
+      break;
+    case GIMP_PRECISION_U16_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R16_UNORM;
+      break;
+    case GIMP_PRECISION_U32_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R32_UINT;
+      break;
+    case GIMP_PRECISION_HALF_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R16_SFLOAT;
+      break;
+    case GIMP_PRECISION_FLOAT_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R32_SFLOAT;
+      break;
+    default:
+      ret_values[1].data.d_string = "Unhandled image precision";
+      return;
+    }
+    break;
+  case GIMP_GRAYA_IMAGE:
+    switch (precision) {
+    case GIMP_PRECISION_U8_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R8G8_UNORM;
+      break;
+    case GIMP_PRECISION_U16_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R16G16_UNORM;
+      break;
+    case GIMP_PRECISION_U32_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R32G32_UINT;
+      break;
+    case GIMP_PRECISION_HALF_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R16G16_SFLOAT;
+      break;
+    case GIMP_PRECISION_FLOAT_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R32G32_SFLOAT;
+      break;
+    default:
+      ret_values[1].data.d_string = "Unhandled image precision";
+      return;
+    }
+    break;
+  case GIMP_RGB_IMAGE:
+    switch (precision) {
+    case GIMP_PRECISION_U8_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R8G8B8_UNORM;
+      break;
+    case GIMP_PRECISION_U16_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R16G16B16_UNORM;
+      break;
+    case GIMP_PRECISION_U32_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R32G32B32_UINT;
+      break;
+    case GIMP_PRECISION_HALF_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R16G16B16_SFLOAT;
+      break;
+    case GIMP_PRECISION_FLOAT_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R32G32B32_SFLOAT;
+      break;
+    default:
+      ret_values[1].data.d_string = "Unhandled image precision";
+      return;
+    }
+    break;
+  case GIMP_RGBA_IMAGE:
+    switch (precision) {
+    case GIMP_PRECISION_U8_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
+      break;
+    case GIMP_PRECISION_U16_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R16G16B16A16_UNORM;
+      break;
+    case GIMP_PRECISION_U32_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R32G32B32A32_UINT;
+      break;
+    case GIMP_PRECISION_HALF_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+      break;
+    case GIMP_PRECISION_FLOAT_LINEAR:
+      create_info.vkFormat = VK_FORMAT_R32_SFLOAT;
+      break;
+    default:
+      ret_values[1].data.d_string = "Unhandled image precision";
+      return;
+    }
+    break;
+  default:
+    ret_values[1].data.d_string = "Unhandled image format";
+    return;
+  }
+  SaveOptions save_options = DEFAULT_SAVE_OPTIONS;
+  switch (run_mode) {
+  case GIMP_RUN_INTERACTIVE:
+    gimp_get_data(SAVE_PROC, &save_options);
+    if (show_options(&save_options)) {
+      gimp_set_data(SAVE_PROC, &save_options, sizeof(SaveOptions));
+    } else {
+      ret_values[0].data.d_status = GIMP_PDB_CANCEL;
+      return;
+    }
+    break;
+
+  case GIMP_RUN_NONINTERACTIVE:
+    if (nparams == 6) {
+      save_options.super_compression = param[5].data.d_int32;
+
+      if ((save_options.super_compression < 0) || (save_options.super_compression > 255)) {
+        ret_values[0].data.d_status = GIMP_PDB_CALLING_ERROR;
+        return;
+      }
+    } else {
+      ret_values[0].data.d_status = GIMP_PDB_CALLING_ERROR;
+      return;
+    }
+    break;
+
+  case GIMP_RUN_WITH_LAST_VALS:
+    gimp_get_data(SAVE_PROC, &save_options);
+    break;
+  }
+
+  GeglBuffer* drawable = gimp_drawable_get_buffer(drawable_ID);
+  create_info.baseWidth = gegl_buffer_get_width(drawable);
+  create_info.baseHeight = gegl_buffer_get_height(drawable);
+  create_info.baseDepth = 1;
+  create_info.numDimensions = 2;
+  create_info.numLevels = 1;
+  create_info.numLayers = 1;
+  create_info.numFaces = 1;
+  create_info.isArray = KTX_FALSE;
+  create_info.generateMipmaps = KTX_FALSE;
+  ktxTexture2* texture;
+  KTX_error_code result = ktxTexture2_Create(&create_info, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture);
+  if (result != KTX_SUCCESS) {
+    ret_values[1].data.d_string = (char*)ktxErrorString(result);
+    g_object_unref(drawable);
+    return;
+  }
+  uint8_t* dest = malloc(create_info.baseWidth * create_info.baseHeight * babl_format_get_bytes_per_pixel(format));
+  gegl_buffer_get(
+      drawable, gegl_buffer_get_extent(drawable), 1, format, dest, ktxTexture_GetRowPitch(ktxTexture(texture), 0), GEGL_ABYSS_NONE);
+  result = ktxTexture_SetImageFromMemory(
+      ktxTexture(texture), 0, 0, 0, dest, create_info.baseWidth * create_info.baseHeight * babl_format_get_bytes_per_pixel(format));
+  free(dest);
+  if (result != KTX_SUCCESS) {
+    ret_values[1].data.d_string = (char*)ktxErrorString(result);
+    ktxTexture_Destroy(ktxTexture(texture));
+    g_object_unref(drawable);
+    return;
+  }
+  g_object_unref(drawable);
+  if (save_options.super_compression) {
+    result = ktxTexture2_CompressBasis(texture, save_options.super_compression);
+    if (result != KTX_SUCCESS) {
+      ret_values[1].data.d_string = (char*)ktxErrorString(result);
+      ktxTexture_Destroy(ktxTexture(texture));
+      return;
+    }
+  }
+  ktxTexture_WriteToNamedFile(ktxTexture(texture), filename);
+  ktxTexture_Destroy(ktxTexture(texture));
+  *nreturn_vals = 1;
+  ret_values[0].data.d_status = GIMP_PDB_SUCCESS;
 }
 
 const GimpPlugInInfo PLUG_IN_INFO = {
@@ -290,18 +529,12 @@ static void query() {
 
   static const GimpParamDef load_return_vals[] = {{GIMP_PDB_IMAGE, "image", "Output image"}};
 
-  static const GimpParamDef save_args[] = {
-      {GIMP_PDB_INT32, "run-mode", "Interactive, non-interactive"},
+  static const GimpParamDef save_args[] = {{GIMP_PDB_INT32, "run-mode", "Interactive, non-interactive"},
       {GIMP_PDB_IMAGE, "image", "Input image"},
       {GIMP_PDB_DRAWABLE, "drawable", "Drawable to save"},
       {GIMP_PDB_STRING, "filename", "The name of the file to save the image in"},
       {GIMP_PDB_STRING, "raw-filename", "The name entered"},
-      {GIMP_PDB_INT32, "quality", "Quality of saved image (0 <= quality <= 100, 100 = lossless)"},
-      {GIMP_PDB_INT32, "alpha-quality", "Quality of alpha channel (0 <= quality <= 100, 100 = lossless)"},
-      {GIMP_PDB_INT32, "overlap", "Overlap level (0 = auto, 1 = none, 2 = one level, 3 = two level)"},
-      {GIMP_PDB_INT32, "subsampling", "Chroma subsampling (0 = Y-only, 1 = 4:2:0, 2 = 4:2:2, 3 = 4:4:4)"},
-      {GIMP_PDB_INT32, "tiling", "Tiling (0 = none, 1 = 256 x 256, 2 = 512 x 512, 3 = 1024 x 1024)"},
-  };
+      {GIMP_PDB_INT32, "super-compression", "?"}};
 
   gimp_install_procedure(LOAD_PROC,
       "Loads KTX/KTX2 images",

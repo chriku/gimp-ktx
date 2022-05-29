@@ -1,8 +1,6 @@
 # gimp-ktx
 
-Import [KTX](https://www.khronos.org/registry/KTX/specs/1.0/ktxspec_v1.html) and [KTX2](https://github.khronos.org/KTX-Specification/) files seamlessly into gimp
-
-WARNING: Export will be implemented as soon as I find enough time.
+Import [KTX](https://www.khronos.org/registry/KTX/specs/1.0/ktxspec_v1.html) and [KTX2](https://github.khronos.org/KTX-Specification/) files and export [KTX2](https://github.khronos.org/KTX-Specification/) seamlessly into and from gimp
 
 ## Building
 
@@ -13,6 +11,7 @@ A PR with a build system would be very welcome.
 
 ## TODO
 
-- [ ] Export
+- [x] Export
+- [ ] More export compression control
 - [ ] CubeMap
 - [ ] Multiple layers/channel/...
