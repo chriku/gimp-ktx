@@ -236,7 +236,14 @@ static void load(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
   gimp_image_set_filename(image_ID, filename);
 
   for (size_t face_i = 0; face_i < texture->numFaces; face_i++) {
-    gint32 layer_ID = gimp_layer_new(image_ID, "Image", texture->baseWidth, texture->baseHeight, image_type, 100.0, GIMP_NORMAL_MODE);
+    char* layer_name = malloc(128); // Memory leak, as I am stupid
+    if (texture->isCubemap) {
+      snprintf(layer_name, 128, "Face (%s %s)", (face_i % 2) ? "negative" : "positive", face_i < 2 ? "x" : face_i < 4 ? "y" : "z");
+    } else {
+      snprintf(layer_name, 128, "Layer %llu", (unsigned long long)face_i);
+    }
+    gint32 layer_ID = gimp_layer_new(image_ID, layer_name, texture->baseWidth, texture->baseHeight, image_type, 100.0, GIMP_NORMAL_MODE);
+    free(layer_name);
     GeglBuffer* drawable = gimp_drawable_get_buffer(layer_ID);
 
     ktx_size_t offset;
