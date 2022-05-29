@@ -13,6 +13,7 @@ A PR with a build system would be very welcome.
 
 - [x] Export
 - [ ] More export compression control
+- [ ] Generate MipMaps
 - [x] CubeMap
 - [ ] Export CubeMap
 - [ ] Multiple layers/channel/...
