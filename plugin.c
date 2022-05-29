@@ -235,25 +235,27 @@ static void load(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
   gint32 image_ID = gimp_image_new_with_precision(texture->baseWidth, texture->baseHeight, base_type, GIMP_PRECISION_FLOAT_LINEAR);
   gimp_image_set_filename(image_ID, filename);
 
-  gint32 layer_ID = gimp_layer_new(image_ID, "Image", texture->baseWidth, texture->baseHeight, image_type, 100.0, GIMP_NORMAL_MODE);
-  GeglBuffer* drawable = gimp_drawable_get_buffer(layer_ID);
+  for (size_t face_i = 0; face_i < texture->numFaces; face_i++) {
+    gint32 layer_ID = gimp_layer_new(image_ID, "Image", texture->baseWidth, texture->baseHeight, image_type, 100.0, GIMP_NORMAL_MODE);
+    GeglBuffer* drawable = gimp_drawable_get_buffer(layer_ID);
 
-  ktx_size_t offset;
-  ktxTexture_GetImageOffset(texture, 0, 0, 0, &offset);
-  if (result != KTX_SUCCESS) {
-    ret_values[1].data.d_string = (char*)ktxErrorString(result);
-    ktxTexture_Destroy(texture);
+    ktx_size_t offset;
+    ktxTexture_GetImageOffset(texture, 0, 0, face_i, &offset);
+    if (result != KTX_SUCCESS) {
+      ret_values[1].data.d_string = (char*)ktxErrorString(result);
+      ktxTexture_Destroy(texture);
+      g_object_unref(drawable);
+      return;
+    }
+    GeglRectangle rect = {.x = 0, .y = 0, .width = texture->baseWidth, .height = texture->baseHeight};
+    gegl_buffer_set(drawable, &rect, 0, format, ktxTexture_GetData(texture) + offset, ktxTexture_GetRowPitch(texture, 0));
+
+    gegl_buffer_flush(drawable);
     g_object_unref(drawable);
-    return;
+
+    gimp_drawable_update(layer_ID, 0, 0, texture->baseWidth, texture->baseHeight);
+    gimp_image_insert_layer(image_ID, layer_ID, 0, face_i);
   }
-  GeglRectangle rect = {.x = 0, .y = 0, .width = texture->baseWidth, .height = texture->baseHeight};
-  gegl_buffer_set(drawable, &rect, 0, format, ktxTexture_GetData(texture) + offset, ktxTexture_GetRowPitch(texture, 0));
-
-  gegl_buffer_flush(drawable);
-  g_object_unref(drawable);
-
-  gimp_drawable_update(layer_ID, 0, 0, texture->baseWidth, texture->baseHeight);
-  gimp_image_insert_layer(image_ID, layer_ID, 0, 0);
 
   ret_values[0].type = GIMP_PDB_STATUS;
   ret_values[0].data.d_status = GIMP_PDB_SUCCESS;
