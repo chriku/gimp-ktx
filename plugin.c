@@ -269,7 +269,7 @@ typedef struct {
   gint super_compression;
 } SaveOptions;
 
-static const SaveOptions DEFAULT_SAVE_OPTIONS = {0, 0};
+static const SaveOptions DEFAULT_SAVE_OPTIONS = {0};
 static gboolean show_options(SaveOptions* save_options) {
 
   GtkWidget* dialog = gimp_export_dialog_new("KTX2", PLUG_IN_BINARY, NULL);
@@ -347,20 +347,32 @@ static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
   const Babl* format = gimp_drawable_get_format(drawable_ID);
   switch (image_type) {
   case GIMP_GRAY_IMAGE:
-    switch (precision) {
+    switch ((unsigned)precision) {
     case GIMP_PRECISION_U8_LINEAR:
       create_info.vkFormat = VK_FORMAT_R8_UNORM;
       break;
+    case 150: // GIMP_PRECISION_U8_NON_LINEAR
+    case 175: // GIMP_PRECISION_U8_PERCEPTUAL
+      create_info.vkFormat = VK_FORMAT_R8_SRGB;
+      break;
     case GIMP_PRECISION_U16_LINEAR:
+    case 250: // GIMP_PRECISION_U16_NON_LINEAR
+    case 275: // GIMP_PRECISION_U16_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R16_UNORM;
       break;
     case GIMP_PRECISION_U32_LINEAR:
+    case 350: // GIMP_PRECISION_U32_NON_LINEAR
+    case 375: // GIMP_PRECISION_U32_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R32_UINT;
       break;
     case GIMP_PRECISION_HALF_LINEAR:
+    case 550: // GIMP_PRECISION_HALF_NON_LINEAR
+    case 575: // GIMP_PRECISION_HALF_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R16_SFLOAT;
       break;
     case GIMP_PRECISION_FLOAT_LINEAR:
+    case 650: // GIMP_PRECISION_FLOAT_NON_LINEAR
+    case 675: // GIMP_PRECISION_FLOAT_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R32_SFLOAT;
       break;
     default:
@@ -369,20 +381,32 @@ static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
     }
     break;
   case GIMP_GRAYA_IMAGE:
-    switch (precision) {
+    switch ((unsigned)precision) {
     case GIMP_PRECISION_U8_LINEAR:
       create_info.vkFormat = VK_FORMAT_R8G8_UNORM;
       break;
+    case 150: // GIMP_PRECISION_U8_NON_LINEAR
+    case 175: // GIMP_PRECISION_U8_PERCEPTUAL
+      create_info.vkFormat = VK_FORMAT_R8G8_SRGB;
+      break;
     case GIMP_PRECISION_U16_LINEAR:
+    case 250: // GIMP_PRECISION_U16_NON_LINEAR
+    case 275: // GIMP_PRECISION_U16_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R16G16_UNORM;
       break;
     case GIMP_PRECISION_U32_LINEAR:
+    case 350: // GIMP_PRECISION_U32_NON_LINEAR
+    case 375: // GIMP_PRECISION_U32_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R32G32_UINT;
       break;
     case GIMP_PRECISION_HALF_LINEAR:
+    case 550: // GIMP_PRECISION_HALF_NON_LINEAR
+    case 575: // GIMP_PRECISION_HALF_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R16G16_SFLOAT;
       break;
     case GIMP_PRECISION_FLOAT_LINEAR:
+    case 650: // GIMP_PRECISION_FLOAT_NON_LINEAR
+    case 675: // GIMP_PRECISION_FLOAT_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R32G32_SFLOAT;
       break;
     default:
@@ -391,20 +415,32 @@ static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
     }
     break;
   case GIMP_RGB_IMAGE:
-    switch (precision) {
+    switch ((unsigned)precision) {
     case GIMP_PRECISION_U8_LINEAR:
       create_info.vkFormat = VK_FORMAT_R8G8B8_UNORM;
       break;
+    case 150: // GIMP_PRECISION_U8_NON_LINEAR
+    case 175: // GIMP_PRECISION_U8_PERCEPTUAL
+      create_info.vkFormat = VK_FORMAT_R8G8B8_SRGB;
+      break;
     case GIMP_PRECISION_U16_LINEAR:
+    case 250: // GIMP_PRECISION_U16_NON_LINEAR
+    case 275: // GIMP_PRECISION_U16_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R16G16B16_UNORM;
       break;
     case GIMP_PRECISION_U32_LINEAR:
+    case 350: // GIMP_PRECISION_U32_NON_LINEAR
+    case 375: // GIMP_PRECISION_U32_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R32G32B32_UINT;
       break;
     case GIMP_PRECISION_HALF_LINEAR:
+    case 550: // GIMP_PRECISION_HALF_NON_LINEAR
+    case 575: // GIMP_PRECISION_HALF_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R16G16B16_SFLOAT;
       break;
     case GIMP_PRECISION_FLOAT_LINEAR:
+    case 650: // GIMP_PRECISION_FLOAT_NON_LINEAR
+    case 675: // GIMP_PRECISION_FLOAT_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R32G32B32_SFLOAT;
       break;
     default:
@@ -413,21 +449,33 @@ static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
     }
     break;
   case GIMP_RGBA_IMAGE:
-    switch (precision) {
+    switch ((unsigned)precision) {
     case GIMP_PRECISION_U8_LINEAR:
       create_info.vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
       break;
+    case 150: // GIMP_PRECISION_U8_NON_LINEAR
+    case 175: // GIMP_PRECISION_U8_PERCEPTUAL
+      create_info.vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
+      break;
     case GIMP_PRECISION_U16_LINEAR:
+    case 250: // GIMP_PRECISION_U16_NON_LINEAR
+    case 275: // GIMP_PRECISION_U16_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R16G16B16A16_UNORM;
       break;
     case GIMP_PRECISION_U32_LINEAR:
+    case 350: // GIMP_PRECISION_U32_NON_LINEAR
+    case 375: // GIMP_PRECISION_U32_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R32G32B32A32_UINT;
       break;
     case GIMP_PRECISION_HALF_LINEAR:
+    case 550: // GIMP_PRECISION_HALF_NON_LINEAR
+    case 575: // GIMP_PRECISION_HALF_PERCEPTUAL
       create_info.vkFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
       break;
     case GIMP_PRECISION_FLOAT_LINEAR:
-      create_info.vkFormat = VK_FORMAT_R32_SFLOAT;
+    case 650: // GIMP_PRECISION_FLOAT_NON_LINEAR
+    case 675: // GIMP_PRECISION_FLOAT_PERCEPTUAL
+      create_info.vkFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
       break;
     default:
       ret_values[1].data.d_string = "Unhandled image precision";
@@ -435,6 +483,7 @@ static void save(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
     }
     break;
   default:
+    printf("UIF %llu\n", (unsigned long long)image_type);
     ret_values[1].data.d_string = "Unhandled image format";
     return;
   }
