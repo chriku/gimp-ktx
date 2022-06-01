@@ -35,7 +35,7 @@ static void load(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
     return;
   }
   if (texture->baseDepth != 1) {
-    ret_values[1].data.d_string = "Invalid base level depth";
+    ret_values[1].data.d_string = "Unsupported base level depth";
     ktxTexture_Destroy(texture);
     return;
   }
@@ -236,7 +236,7 @@ static void load(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
   gimp_image_set_filename(image_ID, filename);
 
   for (size_t face_i = 0; face_i < texture->numFaces; face_i++) {
-    char* layer_name = malloc(128); // Memory leak, as I am stupid
+    char* layer_name = malloc(128);
     if (texture->isCubemap) {
       snprintf(layer_name, 128, "Face (%s %s)", (face_i % 2) ? "negative" : "positive", face_i < 2 ? "x" : face_i < 4 ? "y" : "z");
     } else {
