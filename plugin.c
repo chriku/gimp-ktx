@@ -50,7 +50,7 @@ static void load(gint nparams, const GimpParam* param, gint* nreturn_vals, GimpP
   }
 
   if (texture->isCompressed) {
-    ret_values[1].data.d_string = "Cannot handle compressed texture";
+    ret_values[1].data.d_string = "Unimplemented decompression of compressed texture";
     ktxTexture_Destroy(texture);
     return;
   }
